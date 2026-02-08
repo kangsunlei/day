@@ -1,0 +1,13 @@
+{
+  "name": "rss-collector",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "RSS collector for personal app",
+  "scripts": {
+    "collect": "node ./scripts/fetch-rss.mjs"
+  },
+  "dependencies": {
+    "rss-parser": "^3.13.0"
+  }
+}

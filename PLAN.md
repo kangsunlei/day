@@ -1,36 +1,44 @@
-# RSS 文章推荐 APP 实现计划
+# RSS 文章推荐 APP 实现计划（个人练手 / 本地优先 / 可替换架构）
 
 ## 架构设计
 
-采用分层架构，便于后续适配移动端和 Kindle：
+采用分层架构，便于后续替换数据源、摘要服务、前端形态（Web / 移动端 / Kindle）：
 
 ```
-┌─────────────────┐
-│  展示层（React） │  ← 可替换为移动端/Kindle版本
-└────────┬────────┘
-         │ HTTP API
-┌────────▼────────────────────────┐
-│        后端服务层                 │
-│  ┌──────────┐  ┌──────────────┐ │
-│  │ RSS服务  │  │  AI摘要服务   │ │
-│  └──────────┘  └──────────────┘ │
-│  ┌──────────┐  ┌──────────────┐ │
-│  │推荐算法   │  │  数据存储     │ │
-│  └──────────┘  └──────────────┘ │
-└─────────────────────────────────┘
+┌───────────────────────────────┐
+│  展示层（Web / Mobile / Kindle） │
+└───────────────┬────────────────┘
+                │ 数据读取接口
+┌───────────────▼────────────────┐
+│   数据层（可替换数据来源）       │
+│  ┌───────────┐ ┌──────────────┐ │
+│  │ 本地缓存   │ │ 远程数据源    │ │
+│  │ (SQLite)  │ │ (Actions产出)│ │
+│  └───────────┘ └──────────────┘ │
+└───────────────┬────────────────┘
+                │ 可选：本地服务进程（仅本机）
+┌───────────────▼────────────────┐
+│  可插拔服务层（按需）            │
+│  ┌──────────┐ ┌──────────────┐ │
+│  │ RSS抓取  │ │  AI摘要      │ │
+│  └──────────┘ └──────────────┘ │
+│  ┌──────────┐ ┌──────────────┐ │
+│  │ 推荐算法  │ │  解析管线     │ │
+│  └──────────┘ └──────────────┘ │
+└────────────────────────────────┘
 ```
 
 ## 技术栈
 
-- **后端**: Node.js + Express + TypeScript
-- **前端**: React + TypeScript + Vite
-- **数据库**: SQLite + TypeORM
-- **RSS 解析**: `rss-parser` 或 `feedparser`
-- **AI 服务**: 抽象层设计，支持 OpenAI/Claude/本地模型切换
+- **前端**: React + TypeScript + Vite（可替换为移动端）
+- **本地存储**: SQLite（优先）或 IndexedDB
+- **RSS 解析**: `rss-parser`（抓取端）
+- **离线数据源**: GitHub Actions 产出的 JSON/压缩包
+- **AI 服务**: 可选模块，先单一提供商，后抽象
 
 ## 核心功能模块
 
-### 1. 数据模型设计
+### 1. 数据模型设计（核心不变）
 
 **数据库表结构**:
 
@@ -38,276 +46,157 @@
 - `articles`: 文章（id, feed_id, title, link, content, summary, published_at, fetched_at）
 - `user_preferences`: 用户偏好（article_id, is_interested, feedback_at）
 - `article_topics`: 文章主题标签（article_id, topic, weight）
+- `sync_state`: 同步状态（source, last_sync_at, etag）
 
-### 2. 后端服务 (`backend/`)
+### 2. 数据来源与解析（可替换）
 
-#### 2.1 RSS 抓取服务 (`services/rssService.ts`)
+#### 2.1 远程抓取（GitHub Actions）
 
-- 定时抓取订阅源（使用 node-cron）
+- 定时抓取订阅源（GitHub Actions cron）
 - 解析 RSS/Atom feed
 - 去重处理（基于文章 link）
-- 存储到数据库
+- 生成 `articles.json` / `feeds.json` 并发布（Releases 或 Pages）
 
-#### 2.2 AI 摘要服务 (`services/aiService.ts`)
+#### 2.2 本地导入管线（App 内）
 
-- 抽象接口：`generateSummary(content: string): Promise<Summary>`
-- 实现类：
-  - `OpenAIService`: 使用 OpenAI API
-  - `ClaudeService`: 使用 Claude API
-  - `LocalAIService`: 使用本地模型（Ollama）
-- 配置驱动切换实现
+- 下载远程数据包并解析
+- 版本/时间戳校验（避免重复导入）
+- 合并到本地 SQLite
+- 数据结构稳定，便于替换数据源
 
-#### 2.3 推荐算法 (`services/recommendationService.ts`)
+#### 2.3 可选本地服务进程（仅本机）
 
-- 每日推荐逻辑：
-  - 从未推荐的文章中选择
-  - 基于用户历史偏好计算相似度
-  - 使用主题标签匹配
-  - 随机性与相关性平衡
-- 反馈学习：
-  - 记录用户"感兴趣"的文章主题
-  - 计算文章主题向量
-  - 提升相关主题的推荐权重
+- 如果浏览器端受限（CORS/性能），启用本地进程完成下载与入库
+- 仍是本地应用，不对外提供服务
 
-#### 2.4 API 路由 (`routes/`)
+#### 2.4 AI 摘要（可选模块）
 
-- `GET /api/feeds` - 获取订阅源列表
-- `POST /api/feeds` - 添加订阅源
-- `DELETE /api/feeds/:id` - 删除订阅源
-- `GET /api/articles/today` - 获取今日推荐文章
-- `POST /api/articles/:id/feedback` - 提交反馈（interested/not_interested）
-- `GET /api/articles/history` - 获取历史文章
+- 初期可不做摘要
+- 需要时接入单一提供商
+- 再抽象为多提供商实现
 
-### 3. 前端应用 (`frontend/`)
+#### 2.5 推荐算法（核心可替换）
 
-#### 3.1 订阅源管理页面
+- 初期：随机 + 未读优先
+- 进阶：基于偏好标签加权
+- 高级：向量化/语义相似度（后置）
+
+### 3. API 层（可选）
+
+- 如果前端直接读 SQLite / IndexedDB，则可不需要 API
+- 如果启用本地服务进程，保留最小 API：
+  - `GET /api/feeds`
+  - `GET /api/articles/today`
+  - `POST /api/articles/:id/feedback`
+
+### 4. 前端应用（可替换展示层）
+
+#### 4.1 订阅源管理页面
 
 - 订阅源列表展示
 - 添加订阅源表单（URL 输入）
 - 删除订阅源操作
 - 显示最后抓取时间
 
-#### 3.2 今日推荐页面（主页面）
+#### 4.2 今日推荐页面（主页面）
 
 - 展示今日推荐文章
 - 显示文章标题、摘要、要点
 - "感兴趣"和"不感兴趣"按钮
 - 文章来源和发布时间
 
-#### 3.3 历史记录页面
+#### 4.3 历史记录页面
 
 - 已推荐文章列表
 - 按时间倒序
 - 显示用户反馈状态
 
-## 渐进式实现方案
+## 渐进式实现方案（收敛为 3 阶段）
 
-采用 MVP（最小可行产品）方式，每个阶段都是可用的完整版本，逐步增强功能。
+### MVP-A: 可用的本地阅读器（优先落地）
 
-### MVP1: 最简版本（核心功能）
+**目标**: 从远程数据源导入文章，本地推荐，记录反馈
 
-**目标**: 能手动添加 RSS 源，手动抓取文章，简单推荐，记录反馈
+**技术栈**:
 
-**技术栈简化**:
-
-- 后端: Node.js + Express（JavaScript，不用 TypeScript）
-- 数据库: JSON 文件存储（不用 SQLite）
-- 前端: 简单 HTML 页面（不用 React）
+- 前端: React + TypeScript + Vite
+- 存储: SQLite（优先）或 IndexedDB
 
 **功能**:
 
-1. 手动添加 RSS 订阅源（配置文件或简单表单）
-2. 手动触发 RSS 抓取（API 接口）
-3. 简单推荐：从未推荐文章中随机选一篇
-4. 记录用户反馈（感兴趣/不感兴趣）
-5. 显示今日推荐文章和历史记录
+1. 配置订阅源列表（本地）
+2. 定期/手动从 GitHub Actions 产物下载 `articles.json`
+3. 导入到本地数据库
+4. 简单推荐（未读随机）
+5. 反馈记录
 
-**数据存储**:
+**关键点**:
 
-- `data/feeds.json` - 订阅源列表
-- `data/articles.json` - 文章列表
-- `data/preferences.json` - 用户偏好
-
-**文件结构**:
-
-```
-day/
-├── backend/
-│   ├── server.js           # Express服务器
-│   ├── services/
-│   │   └── rssService.js   # RSS抓取（使用rss-parser）
-│   ├── routes/
-│   │   ├── feeds.js        # 订阅源API
-│   │   └── articles.js     # 文章API
-│   └── data/               # JSON数据文件
-├── frontend/
-│   └── index.html          # 单页面应用（原生JS）
-└── package.json
-```
+- 数据源可替换（远程/本地）
+- 解析与入库逻辑独立，可复用
 
 ---
 
-### MVP2: 添加 AI 摘要
+### MVP-B: 可选 AI 摘要 + 推荐提升
 
-**在 MVP1 基础上增加**:
+**在 MVP-A 基础上增加**:
 
-1. 集成 AI 服务（先只支持 OpenAI，硬编码）
-2. 抓取文章后自动生成摘要
+1. 接入单一 AI 提供商
+2. 导入后生成摘要（可异步）
 3. 前端显示文章摘要和要点
 
-**新增文件**:
-
-- `backend/services/aiService.js` - AI 摘要服务
-
 ---
 
-### MVP3: 引入数据库和 TypeScript
+### MVP-C: 可插拔架构 + 多端准备
 
-**在 MVP2 基础上重构**:
-
-1. 迁移到 TypeScript
-2. 使用 SQLite 替代 JSON 文件
-3. 使用 TypeORM 管理数据模型
-4. 改进代码结构
-
-**新增**:
-
-- TypeScript 配置
-- TypeORM 实体定义
-- 数据库迁移
-
----
-
-### MVP4: 自动化抓取
-
-**在 MVP3 基础上增加**:
-
-1. 定时任务（每天自动抓取 RSS）
-2. 后台服务运行
-3. 错误重试机制
-
-**新增**:
-
-- `backend/services/scheduler.js` - 定时任务服务
-
----
-
-### MVP5: 智能推荐算法
-
-**在 MVP4 基础上增加**:
-
-1. 基于用户反馈的推荐权重
-2. 主题标签提取（简单关键词匹配）
-3. 推荐算法优化
-
-**新增**:
-
-- `backend/services/recommendationService.ts` - 推荐算法
-- 主题提取逻辑
-
----
-
-### MVP6: React 前端
-
-**在 MVP5 基础上重构前端**:
-
-1. 使用 React + Vite 重构前端
-2. 更好的 UI/UX
-3. 响应式设计（适配移动端）
-
-**新增**:
-
-- React 项目结构
-- 组件化开发
-- 路由管理
-
----
-
-### MVP7: AI 服务抽象层
-
-**在 MVP6 基础上增强**:
+**在 MVP-B 基础上增强**:
 
 1. AI 服务抽象接口
-2. 支持多 AI 提供商（OpenAI/Claude/本地）
-3. 配置驱动切换
+2. 数据源抽象（Actions/本地抓取/手动导入）
+3. 推荐算法模块化
+4. 为移动端预留接口层
 
-**新增**:
+## 第一阶段实现清单（MVP-A）
 
-- `backend/services/ai/` - AI 服务抽象层
-- 多 AI 提供商实现
+### 抓取侧（GitHub Actions）
 
----
+1. 编写 RSS 抓取脚本
+2. 定时运行并产出 `articles.json`
+3. 发布到 Releases 或 Pages
 
-### MVP8: 高级推荐算法
+### 应用端（本地）
 
-**在 MVP7 基础上增强**:
+1. 初始化前端项目（React + Vite）
+2. 本地数据库建表（SQLite 或 IndexedDB）
+3. 下载与导入流程
+4. 今日推荐展示
+5. 反馈与历史记录
 
-1. 向量化主题匹配
-2. 更智能的推荐权重计算
-3. 推荐效果分析
-
-## 第一阶段实现清单（MVP1）
-
-### 后端开发
-
-1. ✅ 初始化 Node.js 项目
-2. ✅ 安装依赖（express, rss-parser, cors）
-3. ✅ 创建基础 Express 服务器
-4. ✅ 实现 RSS 抓取服务（手动触发）
-5. ✅ 实现 JSON 数据存储（feeds, articles, preferences）
-6. ✅ 实现订阅源管理 API（GET/POST/DELETE /api/feeds）
-7. ✅ 实现文章 API（GET /api/articles/today, POST /api/articles/:id/feedback）
-8. ✅ 实现简单推荐逻辑（随机选择未推荐文章）
-
-### 前端开发
-
-1. ✅ 创建简单 HTML 页面
-2. ✅ 实现订阅源管理界面
-3. ✅ 实现今日推荐展示
-4. ✅ 实现反馈按钮
-5. ✅ 实现历史记录展示
-
-### 测试验证
-
-1. ✅ 手动添加 RSS 源
-2. ✅ 手动触发抓取
-3. ✅ 查看推荐文章
-4. ✅ 提交反馈
-5. ✅ 验证推荐逻辑
-
-## 关键文件结构
+## 关键文件结构（建议）
 
 ```
 day/
-├── backend/
-│   ├── src/
-│   │   ├── entities/          # 数据模型
-│   │   ├── services/          # 业务逻辑
-│   │   │   ├── rssService.ts
-│   │   │   ├── aiService.ts
-│   │   │   └── recommendationService.ts
-│   │   ├── routes/            # API路由
-│   │   ├── config/            # 配置
-│   │   └── index.ts           # 入口文件
-│   ├── package.json
-│   └── tsconfig.json
-├── frontend/
+├── app/
 │   ├── src/
 │   │   ├── pages/             # 页面组件
 │   │   ├── components/        # 通用组件
 │   │   ├── services/          # API调用
+│   │   ├── data/              # 本地数据访问层
 │   │   └── App.tsx
 │   ├── package.json
 │   └── vite.config.ts
+├── collector/                 # Actions 抓取脚本
+│   ├── scripts/
+│   └── output/
 ├── .env.example               # 环境变量模板
 └── README.md
 ```
 
-## 配置说明
+## 配置说明（最小可用）
 
+- 远程数据源地址（Releases/Pages）
+- 数据库文件存储在本地（`app/data/app.db`）
 - AI 服务配置通过环境变量切换（`AI_PROVIDER=openai|claude|local`）
-- RSS 抓取时间可配置（默认每天凌晨 2 点）
-- 数据库文件存储在 `backend/data/app.db`
 
 ## 开发原则
 
