@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "version": "0.1.0",
+  "packageManager": "pnpm@9.15.0",
   "description": "RSS collector for personal app",
   "scripts": {
     "collect": "node ./scripts/fetch-rss.mjs"

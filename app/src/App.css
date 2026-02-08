@@ -1,0 +1,131 @@
+:root {
+  font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  color: #1e1e1e;
+  background: #f7f4ef;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 20px 80px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+h2 {
+  margin: 0 0 12px;
+}
+
+.sub {
+  margin: 6px 0 0;
+  color: #6b5f54;
+}
+
+.panel {
+  background: #fffaf2;
+  border: 1px solid #eadfce;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 18px;
+  box-shadow: 0 4px 18px rgba(31, 24, 18, 0.06);
+}
+
+.label {
+  display: block;
+  font-size: 13px;
+  color: #6b5f54;
+  margin-bottom: 8px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.input {
+  flex: 1;
+  min-width: 260px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #d9cbb8;
+  background: #fff;
+  font-size: 14px;
+}
+
+.button {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: none;
+  background: #1f2a44;
+  color: #fffaf2;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.button.ghost {
+  background: transparent;
+  color: #1f2a44;
+  border: 1px solid #1f2a44;
+}
+
+.meta {
+  margin-top: 10px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: #6b5f54;
+  font-size: 13px;
+}
+
+.card {
+  display: grid;
+  gap: 10px;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.list li {
+  display: grid;
+  gap: 4px;
+}
+
+.small {
+  font-size: 12px;
+  color: #6b5f54;
+}
+
+.muted {
+  color: #8a7f73;
+}
+
+@media (max-width: 600px) {
+  .app {
+    padding: 24px 16px 60px;
+  }
+}
