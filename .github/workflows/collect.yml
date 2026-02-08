@@ -3,6 +3,10 @@ name: Collect RSS
 on:
   schedule:
     - cron: "30 1 * * *"
+  push:
+    paths:
+      - "collector/**"
+      - ".github/workflows/collect.yml"
   workflow_dispatch: {}
 
 permissions:
